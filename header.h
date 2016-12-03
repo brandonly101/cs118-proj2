@@ -3,9 +3,18 @@
 #include <iostream>
 using namespace std;
 
-class header {
+// Global Constants
+const uint16_t RTO = 500; // 500ms
+const uint16_t HEADER_SIZE = 8; // 8 bytes
+const uint16_t MSS = 1024;
+const uint16_t MAX_PACKET_LEN = 1032; // max 1024 bytes of payload
+const uint16_t MSN = 30720; // 30 KB
+const uint16_t SSTHRESH = 15360; // initial slow start threshold (bytes)
+const uint16_t MAX_RECVWIN = 15360; // TODO 
+
+class Header {
 	public:
-		header() {
+		Header() {
 			m_seqNum = 0;
 			m_ackNum = 0;
 			m_window = 0;
@@ -14,7 +23,7 @@ class header {
 			m_fin = 0;
 		}
 
-		header(uint16_t seqNum, uint16_t ackNum, uint16_t window, bool ack, bool syn, bool fin) {
+		Header(uint16_t seqNum, uint16_t ackNum, uint16_t window, bool ack, bool syn, bool fin) {
 			m_seqNum = seqNum;
 			m_ackNum = ackNum;
 			m_window = window;
