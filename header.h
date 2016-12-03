@@ -47,23 +47,25 @@ class header {
 			return m_fin;
 		}
 
-		uint8_t encodeFlags (){
+		uint16_t encodeFlags() {
+			uint16_t res;
 			if (!m_ack && !m_syn && !m_fin)
-				return 0;
-			if (!m_ack && !m_syn && m_fin)
-				return 1;
-			if (!m_ack && m_syn && !m_fin)
-				return 2;
-			if (!m_ack && m_syn && m_fin)
-				return 3;
-			if (m_ack && !m_syn && !m_fin)
-				return 4;
-			if (m_ack && !m_syn && m_fin)
-				return 5;
-			if (m_ack && m_syn && !m_fin)
-				return 6;
-			if (m_ack && m_syn && m_fin)
-				return 7;
+				res = 0;
+			else if (!m_ack && !m_syn && m_fin)
+				res = 1;
+			else if (!m_ack && m_syn && !m_fin)
+				res = 2;
+			else if (!m_ack && m_syn && m_fin)
+				res = 3;
+			else if (m_ack && !m_syn && !m_fin)
+				res = 4;
+			else if (m_ack && !m_syn && m_fin)
+				res = 5;
+			else if (m_ack && m_syn && !m_fin)
+				res = 6;
+			else if (m_ack && m_syn && m_fin)
+				res = 7;
+			return res;
 		}
 
 		uint8_t encodeFront16(uint16_t num) {
@@ -124,7 +126,7 @@ class header {
 			m_window = decodeNum(head[4], head[5]);
 			m_ack = findAck(head[7]);
 			m_syn = findSys(head[7]);
-			m_fin = findSys(head[7]);
+			m_fin = findFin(head[7]);
 			cout << m_seqNum << endl;
 			cout << m_ackNum << endl;
 			cout << m_window << endl;
