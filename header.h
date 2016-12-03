@@ -4,11 +4,10 @@
 using namespace std;
 
 // Global Constants
-const uint16_t RTO = 500; // 500ms
 const uint16_t HEADER_SIZE = 8; // 8 bytes
 const uint16_t MSS = 1024;
 const uint16_t MAX_PACKET_LEN = 1032; // max 1024 bytes of payload
-const uint16_t MSN = 30720; // 30 KB
+const uint16_t MSN = 30720; // 30 KB max sequence number
 const uint16_t SSTHRESH = 15360; // initial slow start threshold (bytes)
 const uint16_t MAX_RECVWIN = 15360; // TODO 
 
@@ -32,15 +31,15 @@ class Header {
 			m_fin = fin;
 		}
 
-		uint16_t returnSeqNum() {
+		uint16_t getSeqNum() {
 			return m_seqNum;
 		}
 
-		uint16_t returnAckNum() {
+		uint16_t getAckNum() {
 			return m_ackNum;
 		}
 
-		uint16_t returnWindow() {
+		uint16_t getWindow() {
 			return m_window;
 		}
 
@@ -98,7 +97,7 @@ class Header {
 			return false;
 		}
 
-		bool findSys(uint8_t num) {
+		bool findSyn(uint8_t num) {
 			int x = (uint16_t) num;
 			if (x == 2 || x == 3 || x == 6 || x == 7)
 				return true;
@@ -132,8 +131,8 @@ class Header {
 			m_ackNum = decodeNum(head[2], head[3]);
 			m_window = decodeNum(head[4], head[5]);
 			m_ack = findAck(head[7]);
-			m_syn = findSys(head[7]);
-			m_fin = findSys(head[7]);
+			m_syn = findSyn(head[7]);
+			m_fin = findSyn(head[7]);
 			cout << m_seqNum << endl;
 			cout << m_ackNum << endl;
 			cout << m_window << endl;
