@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <vector>
+#include <iostream>
 using namespace std;
 
 class header {
@@ -71,14 +72,14 @@ class header {
 
 		uint8_t encodeBack16(uint16_t num) {
 			uint16_t shift = num >> 8;
-			return (uint8) shift;
+			return (uint8_t) shift;
 		}
 
 		uint16_t decodeNum(uint8_t front, uint8_t back) {
 			uint16_t first = (uint16_t) front;
 			uint16_t second = (uint16_t) back;
 			second = second << 8;
-			return front + back;
+			return first + second;
 		}
 
 		bool findAck(uint8_t num) {
@@ -118,12 +119,18 @@ class header {
 		}
 
 		void decode(vector<char> head) {
-			m_seqNum = decodeNum(header[0], header[1]);
-			m_ackNum = decodeNum(header[2], header[3]);
-			m_window = decodeNum(header[4,], header[5]);
-			m_ack = findAck(header[7]);
-			m_syn = findSys(header[7]);
-			m_fin = findSys(header[7]);
+			m_seqNum = decodeNum(head[0], head[1]);
+			m_ackNum = decodeNum(head[2], head[3]);
+			m_window = decodeNum(head[4], head[5]);
+			m_ack = findAck(head[7]);
+			m_syn = findSys(head[7]);
+			m_fin = findSys(head[7]);
+			cout << m_seqNum << endl;
+			cout << m_ackNum << endl;
+			cout << m_window << endl;
+			cout << m_ack << endl;
+			cout << m_syn << endl;
+			cout << m_fin << endl;
 		}
 
 	private:
