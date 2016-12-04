@@ -53,10 +53,10 @@ int main(int argc, char* argv[])
     }
 
     // set retransmission time
-    if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &SOCK_RTO, sizeof(timeval)) == -1) {
-        perror("setsockopt() error");
-        return 3;
-    }
+    // if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &SOCK_RTO, sizeof(timeval)) == -1) {
+    //     perror("setsockopt() error");
+    //     return 3;
+    // }
 
     string ip = getAddr(urlObj.host, urlObj.portnum);
     struct sockaddr_in serverAddr;
@@ -83,32 +83,50 @@ int main(int argc, char* argv[])
     cout << "Sending packet " << sendSyn.getAckNum() << " SYN" << endl;
 
     // Try and receive the server's SYN-ACK.
-    vector<char> recvSynEncoded(HEADER_SIZE);
+    vector<char> recvSynAckEncoded(HEADER_SIZE);
     Header received;
-    //while (!received.isSyn() || !received.isAck()) {
-        recv(sockfd, &recvSynEncoded[0], recvSynEncoded.size(), 0);
-        received.decode(recvSynEncoded);
-        cout << "Recieving packet " << received.getSeqNum() << endl; 
-        //cout << "AckNum: " << received.getAckNum() << " SeqNum: " << received.getSeqNum() << endl;
-    //}
+    // while (!received.isSyn() || !received.isAck()) {
+        recv(sockfd, &recvSynAckEncoded[0], recvSynAckEncoded.size(), 0);
+        received.decode(recvSynAckEncoded);
+        cout << "Recieving packet " << received.getSeqNum() << endl;
+        // cout << "AckNum: " << received.getAckNum() << " SeqNum: " << received.getSeqNum() << endl;
+        // cout << "ACK Flag: " << received.isAck() << " SYN Flag: " << received.isSyn() << endl;
+    // }
 
     // The server's SYN-ACK has been received. Send out an ACK to the server.
-    Header sendAck(received.getAckNum(), received.getSeqNum(), 0, true, false, false);
+    Header sendAck(received.getAckNum(), (received.getSeqNum() + 1) % MSN, 0, true, false, false);
     vector<char> sendAckEncoded = sendAck.encode();
-    cout << "Sending packet " << sendAck.getAckNum() << endl;
     if (send(sockfd, &sendAckEncoded[0], sendAckEncoded.size(), 0) == -1) {
          perror("send() error");
          return 4;
     }
+    cout << "Sending packet " << sendAck.getAckNum() << endl;
 
     // Receive the server's packets. Break out until a FIN packet is received.
     vector<char> recvPacketEncoded(MAX_PACKET_LEN);
     Header recvPacket;
-    while (!recvPacket.isFin()) {
-        recv(sockfd, &recvPacketEncoded[0], recvPacketEncoded.size(), 0);
-        recvPacket.decode(recvSynEncoded);
+    // while (!recvPacket.isFin()) {
+    for (int i = 0; i < 10; i++) {
+        int bytesReceived = recv(sockfd, &recvPacketEncoded[0], recvPacketEncoded.size(), 0);
+        recvPacket.decode(recvPacketEncoded);
+        cout << "Receiving packet " << recvPacket.getSeqNum() << endl;
         // vector<char> recvPacketPayload(&recvPacketEncoded[HEADER_SIZE], &recvPacketEncoded[MAX_PACKET_LEN]);
+
+        // Packet has been received. Send an ACK packet back.
+        // Header sendAckPacket(received.getAckNum(), (received.getSeqNum() + bytesReceived - HEADER_SIZE) % MSN, 0, true, false, false);
+        Header sendAckPacket(received.getAckNum(), (received.getSeqNum() + MSS) % MSN, 0, true, false, false);
+        // Header sendAckPacket(received.getAckNum(), 59, 0, true, false, false);
+        vector<char> sendAckPacketEncoded = sendAckPacket.encode();
+        if (send(sockfd, &sendAckPacketEncoded[0], sendAckPacketEncoded.size(), 0) == -1) {
+             perror("send() error");
+             return 4;
+        }
+        cout << "Sending packet " << sendAckPacket.getAckNum() << endl;
     }
+
+    // For FIN, do the () % modulo shit
+    // Header sendAck(received.getAckNum(), (received.getSeqNum() + 1) % MSN, 0, true, false, false);
+
 
     // struct sockaddr_in clientAddr;
     // socklen_t clientAddrLen = sizeof(clientAddr);
