@@ -134,12 +134,12 @@ class Header {
 			m_ack = findAck(head[7]);
 			m_syn = findSyn(head[7]);
 			m_fin = findFin(head[7]);
-			cout << m_seqNum << endl;
-			cout << m_ackNum << endl;
-			cout << m_window << endl;
-			cout << m_ack << endl;
-			cout << m_syn << endl;
-			cout << m_fin << endl;
+			//cout << m_seqNum << endl;
+			//cout << m_ackNum << endl;
+			//cout << m_window << endl;
+			//cout << m_ack << endl;
+			//cout << m_syn << endl;
+			//cout << m_fin << endl;
 		}
 
 	private:

@@ -80,21 +80,22 @@ int main(int argc, char* argv[])
         perror("send() error");
         return 5;
     }
-    cout << printSendMessage(sendSyn, false) << endl;
+    cout << "Sending packet " << sendSyn.getAckNum() << " SYN" << endl;
 
     // Try and receive the server's SYN-ACK.
     vector<char> recvSynEncoded(HEADER_SIZE);
     Header received;
-    while (!received.isSyn() || !received.isAck()) {
+    //while (!received.isSyn() || !received.isAck()) {
         recv(sockfd, &recvSynEncoded[0], recvSynEncoded.size(), 0);
         received.decode(recvSynEncoded);
-    }
-    cout << received.printRecieveMessage(received) << endl;
+        cout << "Recieving packet " << received.getSeqNum() << endl; 
+        //cout << "AckNum: " << received.getAckNum() << " SeqNum: " << received.getSeqNum() << endl;
+    //}
 
     // The server's SYN-ACK has been received. Send out an ACK to the server.
-    Header sendAck(0, 0, 0, true, false, false);
+    Header sendAck(received.getAckNum(), received.getSeqNum(), 0, true, false, false);
     vector<char> sendAckEncoded = sendAck.encode();
-    cout << printSendMessage(sendAckEncoded, false);
+    cout << "Sending packet " << sendAck.getAckNum() << endl;
     if (send(sockfd, &sendAckEncoded[0], sendAckEncoded.size(), 0) == -1) {
          perror("send() error");
          return 4;
@@ -229,23 +230,4 @@ string getAddr(string host, string portnum)
     freeaddrinfo(res);
 
     return ip;
-}
-
-string printSendMessage(Header head, bool retransmit) {
-    string flags = "";
-    if (head.isSyn())
-        flags = "SYN";
-    else if (head.isFin())
-        flags = "FIN";
-    else if (retransmit)
-        flags = "Retransmission";
-
-    if (flags != "")
-        flags = " " + flags;
-
-    return "Sending packet " + head.getAckNum() + flags;
-}
-
-string printRecieveMessage(Header head) {
-    return "Receiving Packet " + head.getSeqNum();
 }

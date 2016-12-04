@@ -131,7 +131,7 @@ int main(int argc, char* argv[])
       // HANDLE ACK
   		} else if (decoded_packet.isAck()) {
         STAGE = CONNECTION; 
-        cout << "Receiving packet " << decoded_packet.getAckNum() << endl;
+        //cout << "Receiving packet " << decoded_packet.getAckNum() << endl;
 
 
         int acked_bytes = ((decoded_packet.getAckNum() - 1) < 0) ? MSN : decoded_packet.getAckNum() - 1; 
@@ -204,7 +204,7 @@ int main(int argc, char* argv[])
       }
 
 
-  	} else {
+  	} /*else {
       // Timeout
       if (errno == EAGAIN || errno == EWOULDBLOCK) {
         // handle the case if we haven't started our 3 way handshake
@@ -278,7 +278,7 @@ int main(int argc, char* argv[])
 
       }
     }
-
+*/
 
 
 
