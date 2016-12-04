@@ -53,10 +53,10 @@ int main(int argc, char* argv[])
     }
 
     // set retransmission time
-    // if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &SOCK_RTO, sizeof(timeval)) == -1) {
-    //     perror("setsockopt() error");
-    //     return 3;
-    // }
+    if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &SOCK_RTO, sizeof(timeval)) == -1) {
+        perror("setsockopt() error");
+        return 3;
+    }
 
     string ip = getAddr(urlObj.host, urlObj.portnum);
     struct sockaddr_in serverAddr;
@@ -94,13 +94,13 @@ int main(int argc, char* argv[])
     // }
 
     // The server's SYN-ACK has been received. Send out an ACK to the server.
-    Header sendAck(received.getAckNum(), (received.getSeqNum() + 1) % MSN, 0, true, false, false);
+    Header sendAck(received.getAckNum(), (received.getSeqNum() + 1) % MSN, MAX_RECVWIN, true, false, false);
     vector<char> sendAckEncoded = sendAck.encode();
     if (send(sockfd, &sendAckEncoded[0], sendAckEncoded.size(), 0) == -1) {
          perror("send() error");
          return 4;
     }
-    cout << "Sending packet 1" << sendAck.getAckNum() << endl;
+    cout << "Sending packet " << sendAck.getAckNum() << endl;
 
     // Receive the server's packets. Break out until a FIN packet is received.
     vector<char> recvPacketEncoded(MAX_PACKET_LEN);
@@ -113,9 +113,8 @@ int main(int argc, char* argv[])
         // vector<char> recvPacketPayload(&recvPacketEncoded[HEADER_SIZE], &recvPacketEncoded[MAX_PACKET_LEN]);
 
         // Packet has been received. Send an ACK packet back.
-        // Header sendAckPacket(received.getAckNum(), (received.getSeqNum() + bytesReceived - HEADER_SIZE) % MSN, 0, true, false, false);
-        Header sendAckPacket(recvPacket.getAckNum(), (recvPacket.getSeqNum() + MSS) % MSN, 0, true, false, false);
-        // Header sendAckPacket(received.getAckNum(), 59, 0, true, false, false);
+        // Header sendAckPacket(recvPacket.getAckNum(), (recvPacket.getSeqNum() + bytesReceived - HEADER_SIZE) % MSN, MAX_RECVWIN, true, false, false);
+        Header sendAckPacket(recvPacket.getAckNum(), (recvPacket.getSeqNum() + MSS) % MSN, MAX_RECVWIN, true, false, false);
         vector<char> sendAckPacketEncoded = sendAckPacket.encode();
         if (send(sockfd, &sendAckPacketEncoded[0], sendAckPacketEncoded.size(), 0) == -1) {
              perror("send() error");
