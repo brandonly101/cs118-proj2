@@ -123,6 +123,15 @@ int main(int argc, char* argv[])
         cout << "Sending packet " << sendAckPacket.getAckNum() << endl;
     }
 
+    Header sendFinPacket(recvPacket.getAckNum(), (recvPacket.getSeqNum() + MSS) % MSN, MAX_RECVWIN, true, false, true);
+    vector<char> sendFinPacketEncoded = sendFinPacket.encode();
+    if (send(sockfd, &sendFinPacketEncoded[0], sendFinPacketEncoded.size(), 0) == -1) {
+         perror("send() error");
+         return 4;
+    }
+    cout << "Sending packet " << sendFinPacket.getAckNum() << " FIN" << endl;
+
+
     // For FIN, do the () % modulo shit
     // Header sendAck(received.getAckNum(), (received.getSeqNum() + 1) % MSN, 0, true, false, false);
 
