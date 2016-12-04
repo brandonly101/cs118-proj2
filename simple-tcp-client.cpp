@@ -80,34 +80,61 @@ int main(int argc, char* argv[])
         perror("send() error");
         return 5;
     }
-    cout << printSendMessage(sendSyn, false) << endl;
+    cout << "Sending packet " << sendSyn.getAckNum() << " SYN" << endl;
 
     // Try and receive the server's SYN-ACK.
-    vector<char> recvSynEncoded(HEADER_SIZE);
+    vector<char> recvSynAckEncoded(HEADER_SIZE);
     Header received;
-    while (!received.isSyn() || !received.isAck()) {
-        recv(sockfd, &recvSynEncoded[0], recvSynEncoded.size(), 0);
-        received.decode(recvSynEncoded);
-    }
-    cout << received.printRecieveMessage(received) << endl;
+    // while (!received.isSyn() || !received.isAck()) {
+        recv(sockfd, &recvSynAckEncoded[0], recvSynAckEncoded.size(), 0);
+        received.decode(recvSynAckEncoded);
+        cout << "Recieving packet " << received.getSeqNum() << endl;
+        // cout << "AckNum: " << received.getAckNum() << " SeqNum: " << received.getSeqNum() << endl;
+        // cout << "ACK Flag: " << received.isAck() << " SYN Flag: " << received.isSyn() << endl;
+    // }
 
     // The server's SYN-ACK has been received. Send out an ACK to the server.
-    Header sendAck(0, 0, 0, true, false, false);
+    Header sendAck(received.getAckNum(), (received.getSeqNum() + 1) % MSN, MAX_RECVWIN, true, false, false);
     vector<char> sendAckEncoded = sendAck.encode();
-    cout << printSendMessage(sendAckEncoded, false);
     if (send(sockfd, &sendAckEncoded[0], sendAckEncoded.size(), 0) == -1) {
          perror("send() error");
          return 4;
     }
+    cout << "Sending packet " << sendAck.getAckNum() << endl;
 
     // Receive the server's packets. Break out until a FIN packet is received.
     vector<char> recvPacketEncoded(MAX_PACKET_LEN);
     Header recvPacket;
-    while (!recvPacket.isFin()) {
-        recv(sockfd, &recvPacketEncoded[0], recvPacketEncoded.size(), 0);
-        recvPacket.decode(recvSynEncoded);
+    // while (!recvPacket.isFin()) {
+    for (int i = 0; i < 10; i++) {
+        int bytesReceived = recv(sockfd, &recvPacketEncoded[0], recvPacketEncoded.size(), 0);
+        recvPacket.decode(recvPacketEncoded);
+        cout << "Receiving packet " << recvPacket.getSeqNum() << endl;
         // vector<char> recvPacketPayload(&recvPacketEncoded[HEADER_SIZE], &recvPacketEncoded[MAX_PACKET_LEN]);
+
+        // Packet has been received. Send an ACK packet back.
+        // Header sendAckPacket(recvPacket.getAckNum(), (recvPacket.getSeqNum() + bytesReceived - HEADER_SIZE) % MSN, MAX_RECVWIN, true, false, false);
+        Header sendAckPacket(recvPacket.getAckNum(), (recvPacket.getSeqNum() + MSS) % MSN, MAX_RECVWIN, true, false, false);
+        vector<char> sendAckPacketEncoded = sendAckPacket.encode();
+        if (send(sockfd, &sendAckPacketEncoded[0], sendAckPacketEncoded.size(), 0) == -1) {
+             perror("send() error");
+             return 4;
+        }
+        cout << "Sending packet " << sendAckPacket.getAckNum() << endl;
     }
+
+    Header sendFinPacket(recvPacket.getAckNum(), (recvPacket.getSeqNum() + MSS) % MSN, MAX_RECVWIN, true, false, true);
+    vector<char> sendFinPacketEncoded = sendFinPacket.encode();
+    if (send(sockfd, &sendFinPacketEncoded[0], sendFinPacketEncoded.size(), 0) == -1) {
+         perror("send() error");
+         return 4;
+    }
+    cout << "Sending packet " << sendFinPacket.getAckNum() << " FIN" << endl;
+
+
+    // For FIN, do the () % modulo shit
+    // Header sendAck(received.getAckNum(), (received.getSeqNum() + 1) % MSN, 0, true, false, false);
+
 
     // struct sockaddr_in clientAddr;
     // socklen_t clientAddrLen = sizeof(clientAddr);
@@ -229,23 +256,4 @@ string getAddr(string host, string portnum)
     freeaddrinfo(res);
 
     return ip;
-}
-
-string printSendMessage(Header head, bool retransmit) {
-    string flags = "";
-    if (head.isSyn())
-        flags = "SYN";
-    else if (head.isFin())
-        flags = "FIN";
-    else if (retransmit)
-        flags = "Retransmission";
-
-    if (flags != "")
-        flags = " " + flags;
-
-    return "Sending packet " + head.getAckNum() + flags;
-}
-
-string printRecieveMessage(Header head) {
-    return "Receiving Packet " + head.getSeqNum();
 }
