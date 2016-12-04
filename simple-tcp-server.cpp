@@ -30,13 +30,6 @@ struct timeval START_TIME, CURR_TIME;
 
 int STAGE = NOT_CONNECTED;
 
-// Global Constants
-const uint16_t HEADER_SIZE = 8; // 8 bytes
-const uint16_t MSS = 1024;
-const uint16_t MAX_PACKET_LEN = 1032; // max 1024 bytes of payload
-const uint16_t MSN = 30720; // 30 KB max sequence number
-const uint16_t MAX_RECVWIN = 15360; // TODO 
-
 uint16_t INITIAL_CWND = MSS;
 uint16_t INITIAL_SSTHRESH = 15360; // initial slow start threshold (bytes)
 int LAST_BYTE_SENT = -1;
@@ -140,6 +133,7 @@ int main(int argc, char* argv[])
         // Header syn_ack = Header()
 
   		} else if (p.isAck()) {
+        STAGE = CONNECTION; 
 
       }
 
@@ -148,7 +142,6 @@ int main(int argc, char* argv[])
       // Timeout
       if (errno == EAGAIN || errno == EWOULDBLOCK) {
         if (STAGE == NOT_CONNECTED) {
-          cout << "TIMEOUT!" << endl;
           continue; 
         } else {
           // Retransmit
