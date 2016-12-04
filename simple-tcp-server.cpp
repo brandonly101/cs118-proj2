@@ -19,17 +19,32 @@
 
 using namespace std;
 
+#define NOT_CONNECTED 0
+#define CONNECTION_OPEN 1
+#define CONNECTION 2
+#define CONNECTION_CLOSE 3
+
 string PORTNUM;
 string FILENAME;
 struct timeval START_TIME, CURR_TIME;
-int MODE = 0;
 
-int CWND = 1024;
+int STAGE = NOT_CONNECTED;
 
+// Global Constants
+const uint16_t HEADER_SIZE = 8; // 8 bytes
+const uint16_t MSS = 1024;
+const uint16_t MAX_PACKET_LEN = 1032; // max 1024 bytes of payload
+const uint16_t MSN = 30720; // 30 KB max sequence number
+const uint16_t MAX_RECVWIN = 15360; // TODO 
 
-void send_packet(const int mode, const int sockfd, const struct sockaddr_in &cli_addr, const socklen_t &cli_len) {
+uint16_t INITIAL_CWND = MSS;
+uint16_t INITIAL_SSTHRESH = 15360; // initial slow start threshold (bytes)
+int LAST_BYTE_SENT = -1;
+int LAST_BYTE_ACKED = -1;
 
-}
+// void send_packet(const int mode, const int sockfd, const struct sockaddr_in &cli_addr, const socklen_t &cli_len) {
+
+// }
 
 int main(int argc, char* argv[])
 {
@@ -67,7 +82,7 @@ int main(int argc, char* argv[])
   }
 
   struct timeval RTO;
-  RTO.tv_sec = 0;
+  RTO.tv_sec = 2;
   RTO.tv_usec = 500000; // 500ms
 
   if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &RTO, sizeof(timeval)) < 0) {
@@ -79,28 +94,71 @@ int main(int argc, char* argv[])
   string getcontent;
   ifstream openfile (FILENAME);
 
+  vector<char> buf(HEADER_SIZE);
+  int bytes_recv;
+  srand(time(NULL)); // get random sequence number to start with
+  // uint16_t SEQ_NUM = rand() % MSN;
+  uint16_t SEQ_NUM = 0;
+  uint16_t ACK_NUM = 0, BASE_NUM = 0;
+  uint16_t SSTHRESH = INITIAL_SSTHRESH; 
+  uint16_t CWND = INITIAL_CWND;
+
   // gettimeofday(&START_TIME, NULL);
   while(1) {
-  	vector<char> buf(HEADER_SIZE);
-  	int recvlen;
-  	uint16_t ACK_NUM = 0, BASE_NUM = 0;
+
 
   	// gettimeofday(&current, NULL); // TODO does sockopt handle this?
 
+
   	// RECEIVE SYN FROM CLIENT
-  	if ((recvlen = recvfrom(sockfd, &buf[0], HEADER_SIZE, 0, (struct sockaddr*) &cli_addr, &cli_len)) < 0) {
-  		Header syn_h; 
-  		cout << "Receiving packet " << syn_h.getAckNum() << endl;
-  		ACK_NUM = (syn_h.getSeqNum() + 1) % MSN;
+    // loops until we receive something from client to start 3 way handshake
+  	if ((bytes_recv = recvfrom(sockfd, &buf[0], HEADER_SIZE, 0, (struct sockaddr*) &cli_addr, &cli_len)) != -1) {
+  		Header p; 
+  		cout << "Receiving packet " << p.getAckNum() << endl;
+  		ACK_NUM = (p.getSeqNum() + 1) % MSN;
 
-  		syn_h.decode(buf); 
+  		p.decode(buf); 
 
-  		if (syn_h.findSyn()) {
-  			Header syn_ack = Header()
-  			send_packet(1, sockfd, cli_addr, cli_len);
+      // HANDLE SYN 
+  		if (p.isSyn()) {
 
-  		}
-  	}
+        // SEND SYN ACK TO CLIENT
+        Header syn_ack = Header(SEQ_NUM, ACK_NUM, 0, 1, 1, 0);
+        if (sendto(sockfd, (void *) &syn_ack, HEADER_SIZE, 0, (struct sockaddr *) &cli_addr, cli_len) < 0) {
+          cerr << "Error sending SYN ACK from server to client" << endl;
+          exit(-1);
+        }
+
+        cout << "Sending packet " << SEQ_NUM << " " << CWND << " " << SSTHRESH << " SYN" << endl;
+        STAGE = CONNECTION_OPEN;
+        LAST_BYTE_SENT = SEQ_NUM; 
+        SEQ_NUM = (SEQ_NUM + 1) % MSN; 
+
+
+
+  			
+        // Header syn_ack = Header()
+
+  		} else if (p.isAck()) {
+
+      }
+
+
+  	} else {
+      // Timeout
+      if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        if (STAGE == NOT_CONNECTED) {
+          cout << "TIMEOUT!" << endl;
+          continue; 
+        } else {
+          // Retransmit
+
+
+        }
+        
+
+      }
+    }
 
 
 
