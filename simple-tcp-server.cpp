@@ -85,8 +85,10 @@ int main(int argc, char* argv[])
 	}
 
 
-  string getcontent;
   ifstream OPENFILE (FILENAME);
+  OPENFILE.seekg(0, ios::end);
+  int OPENFILE_SIZE = OPENFILE.tellg();
+  OPENFILE.seekg(0);
 
   vector<char> buf(HEADER_SIZE); // TODO check if this gets flushed
 
@@ -145,63 +147,72 @@ int main(int argc, char* argv[])
 
         } 
 
-        // calculate bytes inflight, have MSN first because of unsigned op
-        int inflight = ((MSN + LAST_BYTE_SENT) - LAST_BYTE_ACKED) % MSN;
-
-        // send file
-
-        int WINDOW_SIZE = min((int) decoded_packet.getWindow(), min(CWND, (MSN + 1) / 2)) - inflight; 
-
-        if (!OPENFILE.is_open()) {
-          cerr << "Error, file is not open!" << endl;
-          exit(-1);
-        }
-
-        // TODO handle duplicate ACKs
-        if (CWND < SSTHRESH) { 
-          // Slow Start
-          CWND += MSS; 
-        } else {
-          // Congestion Avoidance
-          CWND += MSS * (MSS / CWND);
-        }
-
-
-
-        // TODO calculate new CWND = min((double) MSS, MSN / 2.0);
-        int CWND_USED = 0;
-        int pos = 0;
-        int bytes_read;
-
-
-        while (floor(CWND) - CWND_USED >= MSS && !OPENFILE.eof()) {
-          Header data = Header(SEQ_NUM, ACK_NUM, WINDOW_SIZE, 1, 0, 0); // ACK flag set
-
-          vector<char> encoded_packet = data.encode(); 
-          encoded_packet.resize(MSS);
+        // TODO check if inflight == 0?
+        if (LAST_ACKED_OPENFILE_INDEX >= OPENFILE_SIZE) {
+          // HANDLE FIN
+          STAGE = CONNECTION_CLOSE;
           
-          OPENFILE.read(&encoded_packet[OPENFILE_INDEX], 1024); 
 
-          bytes_read = OPENFILE.gcount();
 
-          OPENFILE_INDEX += bytes_read; // TODO need last data received?
-          CWND_USED += bytes_read; 
+        } else {
+          // resume where we left off for data
+          // calculate bytes inflight, have MSN first because of unsigned op
+          int inflight = ((MSN + LAST_BYTE_SENT) - LAST_BYTE_ACKED) % MSN;
 
-          if (sendto(sockfd, &encoded_packet[0], encoded_packet.size(), 0, (struct sockaddr*) &cli_addr, cli_len) < 0) {
-            cerr << "Error sending packet" << endl;
-            exit(-1);
-          } 
-          cout << "Sending packet " << SEQ_NUM << " " << CWND << " " << SSTHRESH << endl; 
+          // send file
 
-          LAST_BYTE_SENT = SEQ_NUM; 
-          SEQ_NUM = (SEQ_NUM + bytes_read) % MSN; 
+          int WINDOW_SIZE = min((int) decoded_packet.getWindow(), min(CWND, (MSN + 1) / 2)) - inflight; 
+
+          // if (!OPENFILE.is_open()) {
+          //   cerr << "Error, file is not open!" << endl;
+          //   exit(-1);
+          // }
+
+          // TODO handle duplicate ACKs
+          if (CWND < SSTHRESH) { 
+            // Slow Start
+            CWND += MSS; 
+          } else {
+            // Congestion Avoidance
+            CWND += MSS * (MSS / CWND);
+          }
+
+
+
+          // TODO have CWND as a double?
+          // int CWND_USED = 0;
+          int bytes_sent = 0;
+          int bytes_read;
+
+          while (bytes_sent < WINDOW_SIZE && !OPENFILE.eof()) {
+          // while (CWND - CWND_USED >= MSS && !OPENFILE.eof()) {
+            Header data = Header(SEQ_NUM, ACK_NUM, 0, 1, 0, 0); // ACK flag set
+
+            vector<char> encoded_packet = data.encode(); 
+            encoded_packet.resize(MSS);
+            
+            OPENFILE.read(&encoded_packet[OPENFILE_INDEX], 1024); 
+
+            bytes_read = OPENFILE.gcount();
+
+            OPENFILE_INDEX += bytes_read;
+            bytes_sent += bytes_read; 
+
+            if (sendto(sockfd, &encoded_packet[0], encoded_packet.size(), 0, (struct sockaddr*) &cli_addr, cli_len) < 0) {
+              cerr << "Error sending packet" << endl;
+              exit(-1);
+            } 
+            cout << "Sending packet " << SEQ_NUM << " " << CWND << " " << SSTHRESH << endl; 
+
+            LAST_BYTE_SENT = SEQ_NUM; 
+            SEQ_NUM = (SEQ_NUM + bytes_read) % MSN; 
+          }
         }
 
-      // HANDLE FIN
-      } else if (decoded_packet.isFin()) {
-        STAGE = CONNECTION_CLOSE;
+        
 
-      }
+
+      } 
 
 
   	} else {
@@ -266,6 +277,7 @@ int main(int argc, char* argv[])
 
             SEQ_NUM = (LAST_BYTE_ACKED + 1) % MSN;
 
+          // retransmit FIN
           } else if (STAGE == CONNECTION_CLOSE) {
 
           } else {
