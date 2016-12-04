@@ -14,6 +14,7 @@
 #include <signal.h> 
 #include <fstream> 
 #include <errno.h>
+#include <algorithm>
 
 #include "header.h"
 
@@ -30,8 +31,8 @@ struct timeval START_TIME, CURR_TIME;
 
 int STAGE = NOT_CONNECTED;
 
-uint16_t INITIAL_CWND = MSS;
-uint16_t INITIAL_SSTHRESH = 15360; // initial slow start threshold (bytes)
+int INITIAL_CWND = MSS;
+int INITIAL_SSTHRESH = 15360; // initial slow start threshold (bytes)
 int LAST_BYTE_SENT = -1;
 int LAST_BYTE_ACKED = -1;
 
@@ -91,12 +92,13 @@ int main(int argc, char* argv[])
 
   int bytes_recv;
   srand(time(NULL)); // get random sequence number to start with
-  uint16_t SEQ_NUM = rand() % MSN;
-  uint16_t ACK_NUM = 0, BASE_NUM = 0;
-  uint16_t SSTHRESH = INITIAL_SSTHRESH; 
-  uint16_t CWND = INITIAL_CWND;
+  int SEQ_NUM = rand() % MSN;
+  int ACK_NUM = 0, BASE_NUM = 0;
+  int SSTHRESH = INITIAL_SSTHRESH; 
+  int CWND = INITIAL_CWND;
 
-  uint16_t OPENFILE_INDEX = 0;
+  int OPENFILE_INDEX = 0;
+  int LAST_ACKED_OPENFILE_INDEX = 0;
 
   // gettimeofday(&START_TIME, NULL);
   while(1) {
@@ -131,21 +133,49 @@ int main(int argc, char* argv[])
         STAGE = CONNECTION; 
         cout << "Receiving packet " << decoded_packet.getAckNum() << endl;
 
+
+        int acked_bytes = ((decoded_packet.getAckNum() - 1) < 0) ? MSN : decoded_packet.getAckNum() - 1; 
+        if (acked_bytes > LAST_BYTE_ACKED) {
+          LAST_ACKED_OPENFILE_INDEX += (acked_bytes - LAST_BYTE_ACKED); 
+          LAST_BYTE_ACKED = acked_bytes; 
+        } else if (acked_bytes < LAST_BYTE_ACKED && (LAST_BYTE_ACKED - acked_bytes) > (MSN + 1)/2) { // wrap around
+          int inc = MSN - LAST_BYTE_ACKED + acked_bytes; 
+          LAST_ACKED_OPENFILE_INDEX += inc; 
+          LAST_BYTE_ACKED = acked_bytes; 
+
+        } 
+
+        // calculate bytes inflight, have MSN first because of unsigned op
+        int inflight = ((MSN + LAST_BYTE_SENT) - LAST_BYTE_ACKED) % MSN;
+
         // send file
+
+        int WINDOW_SIZE = min((int) decoded_packet.getWindow(), min(CWND, (MSN + 1) / 2)) - inflight; 
 
         if (!OPENFILE.is_open()) {
           cerr << "Error, file is not open!" << endl;
           exit(-1);
         }
 
+        // TODO handle duplicate ACKs
+        if (CWND < SSTHRESH) { 
+          // Slow Start
+          CWND += MSS; 
+        } else {
+          // Congestion Avoidance
+          CWND += MSS * (MSS / CWND);
+        }
+
+
+
         // TODO calculate new CWND = min((double) MSS, MSN / 2.0);
-        uint16_t CWND_USED = 0;
-        uint16_t pos = 0;
+        int CWND_USED = 0;
+        int pos = 0;
         int bytes_read;
 
 
-        while (CWND - CWND_USED >= MSS && !OPENFILE.eof()) {
-          Header data = Header(SEQ_NUM, ACK_NUM, 0, 1, 0, 0); // ACK flag set
+        while (floor(CWND) - CWND_USED >= MSS && !OPENFILE.eof()) {
+          Header data = Header(SEQ_NUM, ACK_NUM, WINDOW_SIZE, 1, 0, 0); // ACK flag set
 
           vector<char> encoded_packet = data.encode(); 
           encoded_packet.resize(MSS);
@@ -166,6 +196,10 @@ int main(int argc, char* argv[])
           LAST_BYTE_SENT = SEQ_NUM; 
           SEQ_NUM = (SEQ_NUM + bytes_read) % MSN; 
         }
+
+      // HANDLE FIN
+      } else if (decoded_packet.isFin()) {
+        STAGE = CONNECTION_CLOSE;
 
       }
 
@@ -209,7 +243,7 @@ int main(int argc, char* argv[])
           continue; 
         } else {
           // Retransmit
-          SSTHRESH = max((CWND / 2), 1024); // minimum CWND is 1024
+          SSTHRESH = max(CWND/2, MSS); // minimum CWND is 1024
           CWND = INITIAL_CWND; 
 
           // retransmit SYN-ACK
@@ -224,7 +258,13 @@ int main(int argc, char* argv[])
             STAGE = CONNECTION_OPEN;
             LAST_BYTE_SENT = SEQ_NUM; 
             SEQ_NUM = (SEQ_NUM + 1) % MSN;
+
+          // retransmit data
           } else if (STAGE == CONNECTION) { 
+            OPENFILE_INDEX = LAST_ACKED_OPENFILE_INDEX;
+            OPENFILE.seekg(OPENFILE_INDEX);
+
+            SEQ_NUM = (LAST_BYTE_ACKED + 1) % MSN;
 
           } else if (STAGE == CONNECTION_CLOSE) {
 

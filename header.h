@@ -4,11 +4,11 @@
 using namespace std;
 
 // Global Constants
-const uint16_t HEADER_SIZE = 8; // 8 bytes
-const uint16_t MSS = 1024;
-const uint16_t MAX_PACKET_LEN = 1032; // max 1024 bytes of payload
-const uint16_t MSN = 30720; // 30 KB max sequence number
-const uint16_t MAX_RECVWIN = 15360; // TODO 
+const int HEADER_SIZE = 8; // 8 bytes
+const int MSS = 1024;
+const int MAX_PACKET_LEN = 1032; // max 1024 bytes of payload
+const int MSN = 30720; // 30 KB max sequence number
+const int MAX_RECVWIN = 15360; // TODO 
 
 class Header {
 	public:
