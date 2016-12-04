@@ -111,7 +111,7 @@ int main(int argc, char* argv[])
   	if ((bytes_recv = recvfrom(sockfd, &buf[0], HEADER_SIZE, 0, (struct sockaddr*) &cli_addr, &cli_len)) != -1) {
   		Header decoded_packet; 
   		ACK_NUM = (decoded_packet.getSeqNum() + 1) % MSN;
-      SEQ_NUM = decoded_packet.getAckNum() % MSN; // TODO why?
+      // SEQ_NUM = decoded_packet.getAckNum() % MSN; // TODO why?
 
   		decoded_packet.decode(buf); 
 
@@ -153,7 +153,8 @@ int main(int argc, char* argv[])
         } 
 
         // TODO check if inflight == 0?
-        if (LAST_ACKED_OPENFILE_INDEX >= OPENFILE_SIZE) {
+        if (false) {
+        // if (LAST_ACKED_OPENFILE_INDEX >= OPENFILE_SIZE) {
           // HANDLE FIN
           STAGE = CONNECTION_CLOSE;
           
@@ -182,15 +183,14 @@ int main(int argc, char* argv[])
             CWND += MSS * (MSS / CWND);
           }
 
-
-          //
-          // START OF HARCODE
-          //
-
           // TODO have CWND as a double?
           int bytes_sent = 0;
           int bytes_read;
 
+          
+          //
+          // START OF HARCODE
+          //
           Header data; // ACK flag set
 
           // OPENFILE.read(&encoded_packet[HEADER_SIZE], 1024);
