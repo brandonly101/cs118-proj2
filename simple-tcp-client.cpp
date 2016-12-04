@@ -100,7 +100,7 @@ int main(int argc, char* argv[])
          perror("send() error");
          return 4;
     }
-    cout << "Sending packet " << sendAck.getAckNum() << endl;
+    cout << "Sending packet 1" << sendAck.getAckNum() << endl;
 
     // Receive the server's packets. Break out until a FIN packet is received.
     vector<char> recvPacketEncoded(MAX_PACKET_LEN);
@@ -114,7 +114,7 @@ int main(int argc, char* argv[])
 
         // Packet has been received. Send an ACK packet back.
         // Header sendAckPacket(received.getAckNum(), (received.getSeqNum() + bytesReceived - HEADER_SIZE) % MSN, 0, true, false, false);
-        Header sendAckPacket(received.getAckNum(), (received.getSeqNum() + MSS) % MSN, 0, true, false, false);
+        Header sendAckPacket(recvPacket.getAckNum(), (recvPacket.getSeqNum() + MSS) % MSN, 0, true, false, false);
         // Header sendAckPacket(received.getAckNum(), 59, 0, true, false, false);
         vector<char> sendAckPacketEncoded = sendAckPacket.encode();
         if (send(sockfd, &sendAckPacketEncoded[0], sendAckPacketEncoded.size(), 0) == -1) {
