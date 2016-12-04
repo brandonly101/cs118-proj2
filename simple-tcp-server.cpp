@@ -87,14 +87,16 @@ int main(int argc, char* argv[])
   string getcontent;
   ifstream openfile (FILENAME);
 
-  vector<char> buf(HEADER_SIZE);
+  vector<char> buf(HEADER_SIZE); // TODO check if this gets flushed
+
   int bytes_recv;
   srand(time(NULL)); // get random sequence number to start with
-  // uint16_t SEQ_NUM = rand() % MSN;
-  uint16_t SEQ_NUM = 0;
+  uint16_t SEQ_NUM = rand() % MSN;
   uint16_t ACK_NUM = 0, BASE_NUM = 0;
   uint16_t SSTHRESH = INITIAL_SSTHRESH; 
   uint16_t CWND = INITIAL_CWND;
+
+  uint16_t DATA_IND = 0;
 
   // gettimeofday(&START_TIME, NULL);
   while(1) {
@@ -103,17 +105,16 @@ int main(int argc, char* argv[])
   	// gettimeofday(&current, NULL); // TODO does sockopt handle this?
 
 
-  	// RECEIVE SYN FROM CLIENT
-    // loops until we receive something from client to start 3 way handshake
+    // handle data from client
   	if ((bytes_recv = recvfrom(sockfd, &buf[0], HEADER_SIZE, 0, (struct sockaddr*) &cli_addr, &cli_len)) != -1) {
-  		Header p; 
-  		cout << "Receiving packet " << p.getAckNum() << endl;
-  		ACK_NUM = (p.getSeqNum() + 1) % MSN;
+  		Header decoded_packet; 
+  		cout << "Receiving packet " << decoded_packet.getAckNum() << endl;
+  		ACK_NUM = (decoded_packet.getSeqNum() + 1) % MSN;
 
-  		p.decode(buf); 
+  		decoded_packet.decode(buf); 
 
       // HANDLE SYN 
-  		if (p.isSyn()) {
+  		if (decoded_packet.isSyn()) {
 
         // SEND SYN ACK TO CLIENT
         Header syn_ack = Header(SEQ_NUM, ACK_NUM, 0, 1, 1, 0);
@@ -127,13 +128,47 @@ int main(int argc, char* argv[])
         LAST_BYTE_SENT = SEQ_NUM; 
         SEQ_NUM = (SEQ_NUM + 1) % MSN; 
 
-
-
-  			
-        // Header syn_ack = Header()
-
-  		} else if (p.isAck()) {
+      // HANDLE ACK
+  		} else if (decoded_packet.isAck()) {
         STAGE = CONNECTION; 
+        cout << "Receiving packet " << decoded_packet.getAckNum() << endl;
+
+        // send file
+
+        if (!openfile.is_open()) {
+          cerr << "Error, file is not open!" << endl;
+          exit(-1);
+        }
+
+        // TODO calculate new CWND = min((double) MSS, MSN / 2.0);
+        uint16_t CWND_USED = 0;
+        uint16_t pos = 0;
+
+
+        while (CWND - CWND_USED >= MSS && !openfile.eof()) {
+          Header data = Header(SEQ_NUM, ACK_NUM, 0, 1, 0, 0); // ACK flag set
+
+          vector<char> encoded_packet = data.encode(); 
+
+          string data; 
+          data.resize(MSS);
+          size_t pos; 
+          
+          openfile.read(&data[DATA_IND], 1024); 
+          cout << data << endl; 
+
+          pos += openfile.gcount();
+          cout << "POS: " << pos << endl;
+          // encoded_packet
+        }
+
+        
+        Header data = Header(SEQ_NUM, ACK_NUM, 0, 1, 0, 0); // ACK flag set
+        vector<char> encoded_packet = data.encode(); 
+        // encoded_packet
+
+
+
 
       }
 
@@ -141,10 +176,33 @@ int main(int argc, char* argv[])
   	} else {
       // Timeout
       if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        // handle the case if we haven't started our 3 way handshake
         if (STAGE == NOT_CONNECTED) {
           continue; 
         } else {
           // Retransmit
+          SSTHRESH = max((CWND / 2), 1024); // minimum CWND is 1024
+          CWND = INITIAL_CWND; 
+
+          // retransmit SYN-ACK
+          if (STAGE == CONNECTION_OPEN) { 
+            Header syn_ack = Header(SEQ_NUM, ACK_NUM, 0, 1, 1, 0);
+            if (sendto(sockfd, (void *) &syn_ack, HEADER_SIZE, 0, (struct sockaddr *) &cli_addr, cli_len) < 0) {
+              cerr << "Error sending SYN ACK from server to client" << endl;
+              exit(-1);
+            }
+
+            cout << "Sending packet " << SEQ_NUM << " " << CWND << " " << SSTHRESH << " Retransmission SYN" << endl;
+            STAGE = CONNECTION_OPEN;
+            LAST_BYTE_SENT = SEQ_NUM; 
+            SEQ_NUM = (SEQ_NUM + 1) % MSN;
+          } else if (STAGE == CONNECTION) { 
+
+          } else if (STAGE == CONNECTION_CLOSE) {
+
+          } else {
+
+          }
 
 
         }
@@ -160,15 +218,7 @@ int main(int argc, char* argv[])
 
   }
 
-  if(openfile.is_open())
-  {
-
-    while(! openfile.eof())
-    {
-      getline(openfile, getcontent);
-      cout << getcontent << endl;
-    }
-  }
+  
 
   return 0;
 }
