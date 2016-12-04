@@ -9,7 +9,7 @@ SERVER_FILES=simple-tcp-server.cpp
 # Add all .cpp files that need to be compiled for your client
 CLIENT_FILES=simple-tcp-client.cpp
 
-all: server client
+all: simple-tcp-server simple-tcp-client
 
 *.o: *.cpp
 	$(CXX) -o $@ $^ $(CXXFLAGS) $@.cpp
@@ -21,7 +21,7 @@ client: $(CLIENT_FILES:.cpp=.o)
 	$(CXX) -o $@ $(CXXFLAGS) $(CLIENT_FILES:.cpp=.o)
 
 clean:
-	rm -rf *.o *~ *.gch *.swp *.dSYM server client *.tar.gz
+	rm -rf *.o *~ *.gch *.swp *.dSYM simple-tcp-server simple-tcp-client *.tar.gz
 
 tarball: clean
 	tar -cvf $(USERID).tar.gz *
