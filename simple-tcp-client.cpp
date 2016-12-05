@@ -89,40 +89,49 @@ int main(int argc, char* argv[])
     if (send(sockfd, &sendSynEncoded[0], sendSynEncoded.size(), 0) == -1) {
         perror("send() error");
         return 5;
-        }
+    }
     seqNum++;
 
     // Try and receive the server's SYN-ACK.
     vector<char> recvSynAckEncoded(HEADER_SIZE);
     Header received;
-    // will send retransmission syn until it recieves a response from the server
-    while (1) {
-        if (recv(sockfd, &recvSynAckEncoded[0], recvSynAckEncoded.size(), 0) >= 0) {
-            break;
-        } else {
-            if (send(sockfd, &sendSynEncoded[0], sendSynEncoded.size(), 0) == -1) {
-                perror("send() error");
-                return 5;
-            }
-            cout << "Sending packet " << sendSyn.getAckNum() << " Retransmission SYN" << endl;
-        }
+    while (!received.isSyn() || !received.isAck()) {
+        cout << "Recieving packet " << received.getSeqNum() << endl;
+        int bytesRecv = recv(sockfd, &recvSynAckEncoded[0], recvSynAckEncoded.size(), 0);
+        cout << "BYTES: " << bytesRecv << endl;
+        received.decode(recvSynAckEncoded);
+        ackNum = (received.getSeqNum() + 1) % MSN;
+        // cout << "AckNum: " << received.getAckNum() << " SeqNum: " << received.getSeqNum() << endl;
+        // cout << "ACK Flag: " << received.isAck() << " SYN Flag: " << received.isSyn() << endl;
     }
+    // vector<char> recvSynAckEncoded(HEADER_SIZE);
+    // will send retransmission syn until it recieves a response from the server
+    // while (1) {
+    //     recv(sockfd, &recvSynAckEncoded[0], recvSynAckEncoded.size(), 0);
+    //     Header received;
+    //     received.decode(recvSynAckEncoded);
+    //     if (received.isSyn() && received.isAck()) {
+    //         ackNum = (received.getSeqNum() + 1) % MSN;
+    //         cout << "Recieving packet " << received.getSeqNum() << endl;
+    //         break;
+    //     }
 
-    received.decode(recvSynAckEncoded);
-    cout << "Recieving packet " << received.getSeqNum() << endl;
-    ackNum = received.getAckNum() + 1;
+    //     if (send(sockfd, &sendSynEncoded[0], sendSynEncoded.size(), 0) == -1) {
+    //         perror("send() error");
+    //         return 5;
+    //     }
+    //     cout << "Sending packet " << sendSyn.getAckNum() << " Retransmission SYN" << endl;
+    // }    
 
     // The server's SYN-ACK has been received. Send out an ACK to the server.
-    Header sendAck(seqNum, (received.getSeqNum() + 1) % MSN, MAX_RECVWIN, true, false, false);
+    Header sendAck(seqNum, ackNum, MAX_RECVWIN, true, false, false);
     vector<char> sendAckEncoded = sendAck.encode();
     cout << "Sending packet " << sendAck.getAckNum() << endl;
     if (send(sockfd, &sendAckEncoded[0], sendAckEncoded.size(), 0) == -1) {
          perror("send() error");
          return 4;
     }
-
-        seqNum++;
-
+    seqNum++;
 
     // Open an output filestream to write too, along with a vector for a buffer.
     ofstream ofs;
