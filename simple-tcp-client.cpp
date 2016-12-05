@@ -147,7 +147,7 @@ int main(int argc, char* argv[])
              perror("send() error");
              return 4;
         }
-        seqNum++;
+        seqNum = (seqNum + 1) % MSN;
     }
 
     // Write the file to stream.
