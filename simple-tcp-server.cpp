@@ -59,13 +59,13 @@ int main(int argc, char* argv[])
     serv_addr.sin_port = htons(atoi(PORTNUM.c_str()));
     serv_addr.sin_addr.s_addr = INADDR_ANY;
 
-    int sockfd; 
+    int sockfd;
     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
         cerr << "Error opening socket!" << endl;
         exit(-1);
     }
 
-    int yes = 1; 
+    int yes = 1;
     if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) < 0) {
         cerr << "Error setting sockopts (SO_REUSEADDR)!" << endl;
         exit(-1);
@@ -96,6 +96,7 @@ int main(int argc, char* argv[])
     int OPENFILE_SIZE = OPENFILE.tellg();
     int OPENFILE_INDEX = 0;
     OPENFILE.seekg(0);
+    cout << "FILE SIZE : " << OPENFILE_SIZE << endl;
 
     vector<char> buf(HEADER_SIZE); // TODO check if this gets flushed
 
@@ -103,33 +104,31 @@ int main(int argc, char* argv[])
     srand(time(NULL)); // get random sequence number to start with
     int SEQ_NUM = 0;
     int ACK_NUM = 0;
-    int SSTHRESH = INITIAL_SSTHRESH; 
+    int SSTHRESH = INITIAL_SSTHRESH;
     int CWND = INITIAL_CWND;
     int LAST_ACKED_OPENFILE_INDEX = 0;
 
-    // gettimeofday(&START_TIME, NULL);
     while(1) {
-        // gettimeofday(&current, NULL); // TODO does sockopt handle this?
-
         // handle data from client
         if ((bytes_recv = recvfrom(sockfd, &buf[0], HEADER_SIZE, 0, (struct sockaddr*) &cli_addr, &cli_len)) != -1) {
             Header decoded_packet;
             decoded_packet.decode(buf);
             ACK_NUM = (decoded_packet.getSeqNum() + 1) % MSN;
+           
 
-            // HANDLE SYN 
+            // HANDLE SYN
             if (decoded_packet.isSyn()) {
                 cout << "Receiving packet " << decoded_packet.getAckNum() << endl;
 
                 // SEND SYN ACK TO CLIENT
-                Header syn_ack = Header(SEQ_NUM, ACK_NUM, 0, 1, 1, 0);
+                Header syn_ack = Header(SEQ_NUM, ACK_NUM, 0, true, true, 0);
                 cout << "Sending packet " << SEQ_NUM << " " << CWND << " " << SSTHRESH << " SYN" << endl;
                 if (sendto(sockfd, (void *) &syn_ack, HEADER_SIZE, 0, (struct sockaddr *) &cli_addr, cli_len) < 0) {
                     cerr << "Error sending SYN ACK from server to client" << endl;
                     exit(-1);
                 }
                 STAGE = CONNECTION_OPEN;
-                LAST_BYTE_SENT = SEQ_NUM; 
+                LAST_BYTE_SENT = SEQ_NUM;
                 SEQ_NUM = (SEQ_NUM + 1) % MSN;
                 OPENFILE_INDEX = 0;
                 OPENFILE.seekg(0);
@@ -137,36 +136,46 @@ int main(int argc, char* argv[])
             // HANDLE ACK
             } else if (decoded_packet.isAck() && !decoded_packet.isFin()) {
                 cout << "Receiving packet " << decoded_packet.getAckNum() << endl;
-                STAGE = CONNECTION; 
+                STAGE = CONNECTION;
 
-                int acked_bytes = ((decoded_packet.getAckNum() - 1) < 0) ? MSN : decoded_packet.getAckNum() - 1; 
+                int acked_bytes = ((decoded_packet.getAckNum() - 1) < 0) ? MSN : decoded_packet.getAckNum() - 1;
                 if (acked_bytes > LAST_BYTE_ACKED) {
-                    LAST_ACKED_OPENFILE_INDEX += (acked_bytes - LAST_BYTE_ACKED); 
-                    LAST_BYTE_ACKED = acked_bytes; 
+                    LAST_ACKED_OPENFILE_INDEX += (acked_bytes - LAST_BYTE_ACKED);
+                    LAST_BYTE_ACKED = acked_bytes;
                 } else if (acked_bytes < LAST_BYTE_ACKED && (LAST_BYTE_ACKED - acked_bytes) > (MSN + 1)/2) { // wrap around
-                    int inc = MSN - LAST_BYTE_ACKED + acked_bytes; 
-                    LAST_ACKED_OPENFILE_INDEX += inc; 
+                    int inc = MSN - LAST_BYTE_ACKED + acked_bytes;
+                    LAST_ACKED_OPENFILE_INDEX += inc;
                     LAST_BYTE_ACKED = acked_bytes;
                 }
 
+                // calculate bytes inflight
+                int inflight = ((MSN + LAST_BYTE_SENT) - LAST_BYTE_ACKED) % MSN;
+
+                cout << "Last acked file index: " << LAST_ACKED_OPENFILE_INDEX << endl;
+                cout << "Inflight bytes: " << inflight << endl;
+
                 // TODO check if inflight == 0?
-                if (false) {
-                // if (LAST_ACKED_OPENFILE_INDEX >= OPENFILE_SIZE) {
-                    // HANDLE FIN
-                    STAGE = CONNECTION_CLOSE;
+                if (decoded_packet.isFin()) {
+                  // HANDLE FIN ACK
+                  STAGE = CONNECTION_CLOSE;
+                  cout << "FIN ACK RECEIVED" << endl;
+
+                  cout << LAST_ACKED_OPENFILE_INDEX << " >= " << OPENFILE_SIZE << endl;
+                  if (LAST_ACKED_OPENFILE_INDEX >= OPENFILE_SIZE) {
+                    
+                  }
 
                 } else {
                     // resume where we left off for data
-                    // calculate bytes inflight, have MSN first because of unsigned op
-                    int inflight = ((MSN + LAST_BYTE_SENT) - LAST_BYTE_ACKED) % MSN;
+
 
                     // send file
-                    int WINDOW_SIZE = min((int) decoded_packet.getWindow(), min(CWND, (MSN + 1) / 2)) - inflight; 
+                    int WINDOW_SIZE = min((int) decoded_packet.getWindow(), min(CWND, (MSN + 1) / 2)) - inflight;
 
                     // TODO handle duplicate ACKs
-                    if (CWND < SSTHRESH) { 
+                    if (CWND < SSTHRESH) {
                         // Slow Start
-                        CWND += MSS; 
+                        CWND += MSS;
                     } else {
                         // Congestion Avoidance
                         CWND += MSS * (MSS / CWND);
@@ -176,13 +185,15 @@ int main(int argc, char* argv[])
                     int bytes_sent = 0;
                     int bytes_read;
 
-                    //
-                    // START OF HARCODE - everything between HARDCORE sends the packet
-                    //
-                    // while (CWND - CWND_USED >= MSS && !OPENFILE.eof()) {
+                    
+                    cout << "WINDOW SIZE : " << WINDOW_SIZE << endl;
+                    while (bytes_sent < WINDOW_SIZE && !OPENFILE.eof()) {
+                      cout << "BYTES READ : " << OPENFILE.gcount() << endl;
+                      cout << "BYTES SENT : " << bytes_sent << endl;
                         Header data; // ACK flag set
                         vector<char> encoded_packet;
                         int fileSizeRemaining = OPENFILE_SIZE - OPENFILE_INDEX;
+
                         if (fileSizeRemaining > MSS) {
                             // Create the header for the packet.
                             data = Header(SEQ_NUM, ACK_NUM, WINDOW_SIZE, 0, 0, 0); // ACK flag set
@@ -194,7 +205,10 @@ int main(int argc, char* argv[])
                             // Read in the file.
                             OPENFILE.read(&encoded_packet[HEADER_SIZE], MSS);
                             OPENFILE_INDEX += MSS;
+
+
                         } else {
+                            cout << "Sending last packet! " << endl;
                             // Create the header for the packet.
                             data = Header(SEQ_NUM, ACK_NUM, WINDOW_SIZE, 0, 0, 1); // ACK flag set
                             encoded_packet = data.encode();
@@ -204,7 +218,8 @@ int main(int argc, char* argv[])
 
                             // Read in the file.
                             OPENFILE.read(&encoded_packet[HEADER_SIZE], fileSizeRemaining);
-                            STAGE = CONNECTION_CLOSE;
+
+                            STAGE = CONNECTION_CLOSE; 
                         }
 
                         // Send the packet!
@@ -213,39 +228,10 @@ int main(int argc, char* argv[])
                             exit(-1);
                         }
                         LAST_BYTE_SENT = SEQ_NUM;
-                    // }
-                    //
-                    // END OF HARCODE
-                    //
-
-                    /* START OF PREV CODE
-                    while (bytes_sent < WINDOW_SIZE && !OPENFILE.eof()) {
-                    // while (CWND - CWND_USED >= MSS && !OPENFILE.eof()) {
-                        Header data = Header(SEQ_NUM, ACK_NUM, 0, 1, 0, 0); // ACK flag set
-
-                        vector<char> encoded_packet = data.encode(); 
-                        encoded_packet.resize(MSS);
-                        
-                        OPENFILE.read(&encoded_packet[OPENFILE_INDEX], 1024); 
-
-                        bytes_read = OPENFILE.gcount();
-
-                        OPENFILE_INDEX += bytes_read;
-                        bytes_sent += bytes_read; 
-
-                        if (sendto(sockfd, &encoded_packet[0], encoded_packet.size(), 0, (struct sockaddr*) &cli_addr, cli_len) < 0) {
-                            cerr << "Error sending packet" << endl;
-                            exit(-1);
-                        } 
-                        cout << "Sending packet " << SEQ_NUM << " " << CWND << " " << SSTHRESH << endl; 
-
-                        LAST_BYTE_SENT = SEQ_NUM; 
-                        SEQ_NUM = (SEQ_NUM + bytes_read) % MSN; 
+                        bytes_sent += OPENFILE.gcount();
                     }
-                    */
+                    
                 }
-            } else if (decoded_packet.isFin()) {
-                cout << "Done. Connection closed" << endl;
             }
         } /* else {
             // Timeout
@@ -313,7 +299,7 @@ int main(int argc, char* argv[])
                         exit(-1);
                     }
                     cout << "Sending packet " << SEQ_NUM << " " << CWND << " " << SSTHRESH << " Retransmission FIN" << endl;
-                
+
                 } else {
             }
         }*/
