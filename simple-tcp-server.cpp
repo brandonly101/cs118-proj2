@@ -123,8 +123,9 @@ int main(int argc, char* argv[])
 
                 // SEND SYN ACK TO CLIENT
                 Header syn_ack = Header(SEQ_NUM, ACK_NUM, 0, 1, 1, 0);
+                vector<char> encodedSynAck = syn_ack.encode();
                 cout << "Sending packet " << SEQ_NUM << " " << CWND << " " << SSTHRESH << " SYN" << endl;
-                if (sendto(sockfd, (void *) &syn_ack, HEADER_SIZE, 0, (struct sockaddr *) &cli_addr, cli_len) < 0) {
+                if (sendto(sockfd, &encodedSynAck[0], encodedSynAck.size(), 0, (struct sockaddr *) &cli_addr, cli_len) < 0) {
                     cerr << "Error sending SYN ACK from server to client" << endl;
                     exit(-1);
                 }
