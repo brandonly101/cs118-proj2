@@ -128,7 +128,7 @@ int main(int argc, char* argv[])
         int bytesReceived = recv(sockfd, &recvPacketEncoded[0], recvPacketEncoded.size(), 0);
         recvPacket.decode(recvPacketEncoded);
         cout << "Receiving packet " << recvPacket.getSeqNum() << endl;
-        ackNum = received.getAckNum() + bytesReceived - HEADER_SIZE;
+        ackNum = (recvPacket.getSeqNum() + bytesReceived - HEADER_SIZE) % MSN;
 
         // Read the data segment into the buffer.
         vector<char> recvPacketSegment(&recvPacketEncoded[HEADER_SIZE], &recvPacketEncoded[bytesReceived]);
@@ -140,7 +140,7 @@ int main(int argc, char* argv[])
         currFileSize += bytesReceived - HEADER_SIZE;
 
         // Packet has been received. Send an ACK packet back.
-        Header sendAckPacket(seqNum, ackNum % MSN, MAX_RECVWIN, 1, 0, recvPacket.isFin());
+        Header sendAckPacket(seqNum, ackNum, MAX_RECVWIN, 1, 0, recvPacket.isFin());
         vector<char> sendAckPacketEncoded = sendAckPacket.encode();
         cout << "Sending packet " << sendAckPacket.getAckNum() << (recvPacket.isFin() ? " FIN" : "") << endl;
         if (send(sockfd, &sendAckPacketEncoded[0], sendAckPacketEncoded.size(), 0) == -1) {
