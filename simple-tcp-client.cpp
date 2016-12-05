@@ -81,15 +81,6 @@ int main(int argc, char* argv[])
     int seqNum = 0;
     int ackNum = 0;
 
-    // Header sendSyn(seqNum, 0, 0, false, true, false);
-    // vector<char> sendSynEncoded = sendSyn.encode();
-    // cout << "Sending packet " << sendSyn.getAckNum() << " SYN" << endl;
-    // if (send(sockfd, &sendSynEncoded[0], sendSynEncoded.size(), 0) == -1) {
-    //     perror("send() error");
-    //     return 5;
-    // }
-    // seqNum++;
-
     // Try and receive the server's SYN-ACK.
     vector<char> recvSynAckEncoded(HEADER_SIZE);
     Header received;
@@ -102,19 +93,18 @@ int main(int argc, char* argv[])
             perror("send() error");
             return 5;
         }
+        seqNum++;
 
-        int bytesRecv = recv(sockfd, &recvSynAckEncoded[0], recvSynAckEncoded.size(), 0);
-        cout << "BYTES: " << bytesRecv << endl;
+        recv(sockfd, &recvSynAckEncoded[0], recvSynAckEncoded.size(), 0);
         received.decode(recvSynAckEncoded);
         ackNum = (received.getSeqNum() + 1) % MSN;
         // cout << "AckNum: " << received.getAckNum() << " SeqNum: " << received.getSeqNum() << endl;
         // cout << "ACK Flag: " << received.isAck() << " SYN Flag: " << received.isSyn() << endl;
-        if (bytesRecv > 0) {
+        if (received.isSyn() && received.isAck()) {
             cout << "Recieving packet " << received.getSeqNum() << endl;
             break;
         }
     }
-    seqNum++;
 
     // The server's SYN-ACK has been received. Send out an ACK to the server.
     Header sendAck(seqNum, ackNum, MAX_RECVWIN, true, false, false);
@@ -135,33 +125,54 @@ int main(int argc, char* argv[])
     buffer.reserve(maxFileSize);
 
     // Receive the server's packets. Break out until a FIN packet is received.
+    bool first = true;
     vector<char> recvPacketEncoded(MAX_PACKET_LEN);
     Header recvPacket;
     while (!recvPacket.isFin()) {
         // Receive the packet and parse the header. Then, parse the data segment.
         int bytesReceived = recv(sockfd, &recvPacketEncoded[0], recvPacketEncoded.size(), 0);
-        recvPacket.decode(recvPacketEncoded);
-        cout << "Receiving packet " << recvPacket.getSeqNum() << endl;
-        ackNum = (recvPacket.getSeqNum() + bytesReceived - HEADER_SIZE) % MSN;
+        if (bytesReceived <= 0 && first) {
+            if (send(sockfd, &sendAckEncoded[0], sendAckEncoded.size(), 0) == -1) {
+                perror("send() error");
+                return 4;
+            }
+        } else {
+            first = false;
+            recvPacket.decode(recvPacketEncoded);
+            cout << "Receiving packet " << recvPacket.getSeqNum() << endl;
+            if (ackNum < recvPacket.getSeqNum()) {
+                // Packet proper order packet has not been received. Send an ACK packet back with the same ACK.
+                Header sendAckPacket(seqNum, ackNum, MAX_RECVWIN, 1, 0, recvPacket.isFin());
+                vector<char> sendAckPacketEncoded = sendAckPacket.encode();
+                cout << "Sending packet " << sendAckPacket.getAckNum() << endl;
+                if (send(sockfd, &sendAckPacketEncoded[0], sendAckPacketEncoded.size(), 0) == -1) {
+                     perror("send() error");
+                     return 4;
+                }
+                seqNum = (seqNum + 1) % MSN;
+            } else {
+                ackNum = (recvPacket.getSeqNum() + bytesReceived - HEADER_SIZE) % MSN;
 
-        // Read the data segment into the buffer.
-        vector<char> recvPacketSegment(&recvPacketEncoded[HEADER_SIZE], &recvPacketEncoded[bytesReceived]);
-        if (maxFileSize <= currFileSize) {
-            maxFileSize *= 2;
-            buffer.reserve(maxFileSize);
-        }
-        buffer.insert(buffer.end(), recvPacketSegment.begin(), recvPacketSegment.end());
-        currFileSize += bytesReceived - HEADER_SIZE;
+                // Read the data segment into the buffer.
+                vector<char> recvPacketSegment(&recvPacketEncoded[HEADER_SIZE], &recvPacketEncoded[bytesReceived]);
+                if (maxFileSize <= currFileSize) {
+                    maxFileSize *= 2;
+                    buffer.reserve(maxFileSize);
+                }
+                buffer.insert(buffer.end(), recvPacketSegment.begin(), recvPacketSegment.end());
+                currFileSize += bytesReceived - HEADER_SIZE;
 
-        // Packet has been received. Send an ACK packet back.
-        Header sendAckPacket(seqNum, ackNum, MAX_RECVWIN, 1, 0, recvPacket.isFin());
-        vector<char> sendAckPacketEncoded = sendAckPacket.encode();
-        cout << "Sending packet " << sendAckPacket.getAckNum() << (recvPacket.isFin() ? " FIN" : "") << endl;
-        if (send(sockfd, &sendAckPacketEncoded[0], sendAckPacketEncoded.size(), 0) == -1) {
-             perror("send() error");
-             return 4;
+                // Packet has been received. Send an ACK packet back.
+                Header sendAckPacket(seqNum, ackNum, MAX_RECVWIN, 1, 0, recvPacket.isFin());
+                vector<char> sendAckPacketEncoded = sendAckPacket.encode();
+                cout << "Sending packet " << sendAckPacket.getAckNum() << (recvPacket.isFin() ? " FIN" : "") << endl;
+                if (send(sockfd, &sendAckPacketEncoded[0], sendAckPacketEncoded.size(), 0) == -1) {
+                     perror("send() error");
+                     return 4;
+                }
+                seqNum = (seqNum + 1) % MSN;
+            }
         }
-        seqNum = (seqNum + 1) % MSN;
     }
 
     // Write the file to stream.
