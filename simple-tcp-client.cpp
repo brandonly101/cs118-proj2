@@ -16,6 +16,7 @@
 #include <sstream>
 #include <vector>
 #include <fstream>
+#include <time.h>
 
 #include "header.h"
 
@@ -84,23 +85,32 @@ int main(int argc, char* argv[])
     Header sendSyn(seqNum, 0, 0, false, true, false);
     vector<char> sendSynEncoded = sendSyn.encode();
     cout << "Sending packet " << sendSyn.getAckNum() << " SYN" << endl;
+
     if (send(sockfd, &sendSynEncoded[0], sendSynEncoded.size(), 0) == -1) {
         perror("send() error");
         return 5;
-    }
+        }
     seqNum++;
 
     // Try and receive the server's SYN-ACK.
     vector<char> recvSynAckEncoded(HEADER_SIZE);
     Header received;
-    // while (!received.isSyn() || !received.isAck()) {
-        cout << "Recieving packet " << received.getSeqNum() << endl;
-        recv(sockfd, &recvSynAckEncoded[0], recvSynAckEncoded.size(), 0);
-        received.decode(recvSynAckEncoded);
-        ackNum = received.getAckNum() + 1;
-        // cout << "AckNum: " << received.getAckNum() << " SeqNum: " << received.getSeqNum() << endl;
-        // cout << "ACK Flag: " << received.isAck() << " SYN Flag: " << received.isSyn() << endl;
-    // }
+    // will send retransmission syn until it recieves a response from the server
+    while (1) {
+        if (recv(sockfd, &recvSynAckEncoded[0], recvSynAckEncoded.size(), 0) >= 0) {
+            break;
+        } else {
+            if (send(sockfd, &sendSynEncoded[0], sendSynEncoded.size(), 0) == -1) {
+                perror("send() error");
+                return 5;
+            }
+            cout << "Sending packet " << sendSyn.getAckNum() << " Retransmission SYN" << endl;
+        }
+    }
+
+    received.decode(recvSynAckEncoded);
+    cout << "Recieving packet " << received.getSeqNum() << endl;
+    ackNum = received.getAckNum() + 1;
 
     // The server's SYN-ACK has been received. Send out an ACK to the server.
     Header sendAck(seqNum, (received.getSeqNum() + 1) % MSN, MAX_RECVWIN, true, false, false);
@@ -110,7 +120,9 @@ int main(int argc, char* argv[])
          perror("send() error");
          return 4;
     }
-    seqNum++;
+
+        seqNum++;
+
 
     // Open an output filestream to write too, along with a vector for a buffer.
     ofstream ofs;
@@ -153,7 +165,6 @@ int main(int argc, char* argv[])
     // Write the file to stream.
     ofs.write(&buffer[0], buffer.size());
     ofs.close();
-
     close(sockfd);
 
     return 0;

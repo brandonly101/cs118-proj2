@@ -9,6 +9,7 @@ const int MSS = 1024;
 const int MAX_PACKET_LEN = 1032; // max 1024 bytes of payload
 const int MSN = 30720; // 30 KB max sequence number
 const int MAX_RECVWIN = 15360; // TODO 
+const float RTO = 0.5; // seconds
 
 class Header {
 	public:
