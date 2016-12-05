@@ -24,7 +24,7 @@ using namespace std;
 
 // Constants.
 const timeval SOCK_RTO { 0, 500000 };
-const string OUTPUT_FILENAME = "output";
+const string OUTPUT_FILENAME = "received.data";
 
 struct URLObject
 {
