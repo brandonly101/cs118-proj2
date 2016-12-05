@@ -14,6 +14,7 @@
 #include <iostream>
 #include <sstream>
 #include <vector>
+#include <fstream>
 
 #include "header.h"
 
@@ -21,6 +22,7 @@ using namespace std;
 
 // Constants.
 const timeval SOCK_RTO { 0, 500000 };
+const string OUTPUT_FILENAME = "output";
 
 struct URLObject
 {
@@ -102,92 +104,48 @@ int main(int argc, char* argv[])
     }
     cout << "Sending packet " << sendAck.getAckNum() << endl;
 
+    // Open an output filestream to write too, along with a vector for a buffer.
+    ofstream ofs;
+    ofs.open(OUTPUT_FILENAME, ofstream::out | ofstream::trunc | ofstream::binary);
+
     // Receive the server's packets. Break out until a FIN packet is received.
     vector<char> recvPacketEncoded(MAX_PACKET_LEN);
     Header recvPacket;
-    // while (!recvPacket.isFin()) {
-    for (int i = 0; i < 10; i++) {
+    while (!recvPacket.isFin()) {
+        // Receive the packet and parse the header. Then, parse the data segment.
         int bytesReceived = recv(sockfd, &recvPacketEncoded[0], recvPacketEncoded.size(), 0);
+        cout << "BYTES RECEIVED: " << bytesReceived << endl;
         recvPacket.decode(recvPacketEncoded);
         cout << "Receiving packet " << recvPacket.getSeqNum() << endl;
-        // vector<char> recvPacketPayload(&recvPacketEncoded[HEADER_SIZE], &recvPacketEncoded[MAX_PACKET_LEN]);
+
+        // Read the data segment into the buffer.
+        vector<char> recvPacketSegment(&recvPacketEncoded[HEADER_SIZE], &recvPacketEncoded[bytesReceived]);
+        ofs.write(&recvPacketSegment[0], recvPacketSegment.size());
 
         // Packet has been received. Send an ACK packet back.
-        // Header sendAckPacket(recvPacket.getAckNum(), (recvPacket.getSeqNum() + bytesReceived - HEADER_SIZE) % MSN, MAX_RECVWIN, true, false, false);
-        Header sendAckPacket(recvPacket.getAckNum(), (recvPacket.getSeqNum() + MSS) % MSN, MAX_RECVWIN, true, false, false);
+        Header sendAckPacket(recvPacket.getAckNum(), (recvPacket.getSeqNum() + bytesReceived - HEADER_SIZE) % MSN, MAX_RECVWIN, 1, 0, recvPacket.isFin());
         vector<char> sendAckPacketEncoded = sendAckPacket.encode();
         if (send(sockfd, &sendAckPacketEncoded[0], sendAckPacketEncoded.size(), 0) == -1) {
              perror("send() error");
              return 4;
         }
-        cout << "Sending packet " << sendAckPacket.getAckNum() << endl;
+        cout << "Sending packet " << sendAckPacket.getAckNum() << (recvPacket.isFin() ? " FIN" : "") << endl;
     }
 
-    Header sendFinPacket(recvPacket.getAckNum(), (recvPacket.getSeqNum() + MSS) % MSN, MAX_RECVWIN, true, false, true);
-    vector<char> sendFinPacketEncoded = sendFinPacket.encode();
-    if (send(sockfd, &sendFinPacketEncoded[0], sendFinPacketEncoded.size(), 0) == -1) {
-         perror("send() error");
-         return 4;
-    }
-    cout << "Sending packet " << sendFinPacket.getAckNum() << " FIN" << endl;
+    // Write the file to stream.
+    // ofs.write(buffer, buffer.size());
+    ofs.close();
 
+    // Header sendFinPacket(recvPacket.getAckNum(), (recvPacket.getSeqNum() + MSS) % MSN, MAX_RECVWIN, true, false, true);
+    // vector<char> sendFinPacketEncoded = sendFinPacket.encode();
+    // if (send(sockfd, &sendFinPacketEncoded[0], sendFinPacketEncoded.size(), 0) == -1) {
+    //      perror("send() error");
+    //      return 4;
+    // }
+    // cout << "Sending packet " << sendFinPacket.getAckNum() << " FIN" << endl;
 
     // For FIN, do the () % modulo shit
     // Header sendAck(received.getAckNum(), (received.getSeqNum() + 1) % MSN, 0, true, false, false);
-
-
-    // struct sockaddr_in clientAddr;
-    // socklen_t clientAddrLen = sizeof(clientAddr);
-    // if (getsockname(sockfd, (struct sockaddr *)&clientAddr, &clientAddrLen) == -1)
-    // {
-    //     perror("getsockname() error");
-    //     return 3;
-    // }
-
-    // char ipstr[INET_ADDRSTRLEN] = {'\0'};
-    // inet_ntop(clientAddr.sin_family, &clientAddr.sin_addr, ipstr, sizeof(ipstr));
-    // cout << "Set up a connection from: " << ipstr << ":" <<
-    // ntohs(clientAddr.sin_port) << endl;
-
-    // Create the HTTP request. For now, the only method is GET 1.0.
-    // HTTPRequest req;
-    // req.setMethod("GET");
-    // req.setURL(urlObj.path);
-    // //cout << getFileContentType(urlObj.path);
-    // req.setVersion("1.0");
-    // string encodedReq = req.encode();
-
-    // // Send the HTTP request.
-    // if (send(sockfd, encodedReq.c_str(), encodedReq.size(), 0) == -1)
-    // {
-    //     perror("send() error");
-    //     return 4;
-    // }
-
-    // send/receive data to/from connection
-    // char buffer[MAX_HTTP_MESSAGE_SIZE];
-    // memset(buffer, '\0', sizeof(buffer));
-
-    // Wait for and receive the HTTP response.
-    // if (recv(sockfd, buffer, MAX_HTTP_MESSAGE_SIZE, 0) == -1)
-    // {
-    //     perror("recv() error");
-    //     return 5;
-    // }
-    // cout << buffer << endl;
-    // string header = string(buffer);
-
-    // Download the file...
-    // HTTPResponse response;
-    // response.decode(string(buffer));
-    // string filename = "." + req.getURL();
-    // int fd = open(filename.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 777);
-    // if (write(fd, response.getBody().c_str(), response.getBody().length()) == -1)
-    // {
-    //     perror("read() error");
-    //     return -1;
-    // }
-    // close(fd);
 
     close(sockfd);
 
