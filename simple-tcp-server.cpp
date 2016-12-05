@@ -97,7 +97,7 @@ int main(int argc, char* argv[])
 
     int bytes_recv;
     srand(time(NULL)); // get random sequence number to start with
-    int SEQ_NUM = rand() % MSN;
+    int SEQ_NUM = 0;
     int ACK_NUM = 0, BASE_NUM = 0;
     int SSTHRESH = INITIAL_SSTHRESH; 
     int CWND = INITIAL_CWND;
@@ -110,18 +110,17 @@ int main(int argc, char* argv[])
 
         // handle data from client
         if ((bytes_recv = recvfrom(sockfd, &buf[0], HEADER_SIZE, 0, (struct sockaddr*) &cli_addr, &cli_len)) != -1) {
-            Header decoded_packet; 
-            ACK_NUM = (decoded_packet.getSeqNum() + 1) % MSN;
-            // SEQ_NUM = decoded_packet.getAckNum() % MSN; // TODO why?
+            Header decoded_packet;
 
             decoded_packet.decode(buf); 
 
             // HANDLE SYN 
             if (decoded_packet.isSyn()) {
                 cout << "Receiving packet " << decoded_packet.getAckNum() << endl;
+                ACK_NUM = (decoded_packet.getSeqNum()) % MSN;
 
                 // SEND SYN ACK TO CLIENT
-                Header syn_ack = Header(SEQ_NUM, ACK_NUM, 0, 1, 1, 0);
+                Header syn_ack = Header(SEQ_NUM, , 0, 1, 1, 0);
                 if (sendto(sockfd, (void *) &syn_ack, HEADER_SIZE, 0, (struct sockaddr *) &cli_addr, cli_len) < 0) {
                     cerr << "Error sending SYN ACK from server to client" << endl;
                     exit(-1);
@@ -137,9 +136,7 @@ int main(int argc, char* argv[])
             // HANDLE ACK
             } else if (decoded_packet.isAck() && !decoded_packet.isFin()) {
                 cout << "Receiving packet " << decoded_packet.getAckNum() << endl;
-                SEQ_NUM = decoded_packet.getAckNum() % MSN;
                 STAGE = CONNECTION; 
-                cout << "Receiving packet " << decoded_packet.getAckNum() << endl;
 
                 int acked_bytes = ((decoded_packet.getAckNum() - 1) < 0) ? MSN : decoded_packet.getAckNum() - 1; 
                 if (acked_bytes > LAST_BYTE_ACKED) {
@@ -217,6 +214,7 @@ int main(int argc, char* argv[])
                             cerr << "Error sending packet" << endl;
                             exit(-1);
                         }
+                        SEQ_NUM = (SEQ_NUM + MSS) % MSN;
                         LAST_BYTE_SENT = SEQ_NUM;
                     // }
                     //
