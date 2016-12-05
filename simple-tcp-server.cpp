@@ -90,7 +90,7 @@ int main(int argc, char* argv[])
     OPENFILE.open(FILENAME, ifstream::in);
     OPENFILE.seekg(0, ios::end);
     int OPENFILE_SIZE = OPENFILE.tellg();
-    int OPENFILE_SIZE_REMAINING = OPENFILE_SIZE;
+    int OPENFILE_SIZE_READ = 0;
     OPENFILE.seekg(0);
 
     vector<char> buf(HEADER_SIZE); // TODO check if this gets flushed
@@ -131,7 +131,7 @@ int main(int argc, char* argv[])
                 STAGE = CONNECTION_OPEN;
                 LAST_BYTE_SENT = SEQ_NUM; 
                 SEQ_NUM = (SEQ_NUM + 1) % MSN;
-                OPENFILE_SIZE_REMAINING = OPENFILE_SIZE;
+                OPENFILE_SIZE_READ = 0;
                 OPENFILE.seekg(0);
 
             // HANDLE ACK
@@ -186,36 +186,39 @@ int main(int argc, char* argv[])
                     //
                     // START OF HARCODE - everything between HARDCORE sends the packet
                     //
-                    Header data; // ACK flag set
-                    vector<char> encoded_packet;
-                    if (OPENFILE_SIZE_REMAINING > MSS) {
-                        // Create the header for the packet.
-                        data = Header(SEQ_NUM, ACK_NUM, WINDOW_SIZE, 0, 0, 0); // ACK flag set
-                        encoded_packet = data.encode();
-                        encoded_packet.resize(MAX_PACKET_LEN);
-                        cout << "Sending packet " << SEQ_NUM << " " << CWND << " " << SSTHRESH << endl;
+                    // while (CWND - CWND_USED >= MSS && !OPENFILE.eof()) {
+                        Header data; // ACK flag set
+                        vector<char> encoded_packet;
+                        int fileSizeRemaining = OPENFILE_SIZE - OPENFILE_SIZE_READ;
+                        if (fileSizeRemaining > MSS) {
+                            // Create the header for the packet.
+                            data = Header(SEQ_NUM, ACK_NUM, WINDOW_SIZE, 0, 0, 0); // ACK flag set
+                            encoded_packet = data.encode();
+                            encoded_packet.resize(MAX_PACKET_LEN);
+                            cout << "Sending packet " << SEQ_NUM << " " << CWND << " " << SSTHRESH << endl;
 
-                        // Read in the file.
-                        OPENFILE.read(&encoded_packet[HEADER_SIZE], MSS);
-                        OPENFILE_SIZE_REMAINING -= MSS;
-                    } else {
-                        // Create the header for the packet.
-                        data = Header(SEQ_NUM, ACK_NUM, WINDOW_SIZE, 0, 0, 1); // ACK flag set
-                        encoded_packet = data.encode();
-                        encoded_packet.resize(HEADER_SIZE + OPENFILE_SIZE_REMAINING);
-                        cout << "Sending packet " << SEQ_NUM << " " << CWND << " " << SSTHRESH << " FIN" << endl;
+                            // Read in the file.
+                            OPENFILE.read(&encoded_packet[HEADER_SIZE], MSS);
+                            OPENFILE_SIZE_READ += MSS;
+                        } else {
+                            // Create the header for the packet.
+                            data = Header(SEQ_NUM, ACK_NUM, WINDOW_SIZE, 0, 0, 1); // ACK flag set
+                            encoded_packet = data.encode();
+                            encoded_packet.resize(HEADER_SIZE + fileSizeRemaining);
+                            cout << "Sending packet " << SEQ_NUM << " " << CWND << " " << SSTHRESH << " FIN" << endl;
 
-                        // Read in the file.
-                        OPENFILE.read(&encoded_packet[HEADER_SIZE], OPENFILE_SIZE_REMAINING);
-                        STAGE = CONNECTION_CLOSE;
-                    }
+                            // Read in the file.
+                            OPENFILE.read(&encoded_packet[HEADER_SIZE], fileSizeRemaining);
+                            STAGE = CONNECTION_CLOSE;
+                        }
 
-                    // Send the packet!
-                    if (sendto(sockfd, &encoded_packet[0], encoded_packet.size(), 0, (struct sockaddr*) &cli_addr, cli_len) < 0) {
-                        cerr << "Error sending packet" << endl;
-                        exit(-1);
-                    }
-                    LAST_BYTE_SENT = SEQ_NUM;
+                        // Send the packet!
+                        if (sendto(sockfd, &encoded_packet[0], encoded_packet.size(), 0, (struct sockaddr*) &cli_addr, cli_len) < 0) {
+                            cerr << "Error sending packet" << endl;
+                            exit(-1);
+                        }
+                        LAST_BYTE_SENT = SEQ_NUM;
+                    // }
                     //
                     // END OF HARCODE
                     //

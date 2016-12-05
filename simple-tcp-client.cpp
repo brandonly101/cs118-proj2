@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <stdlib.h>
 
 #include <string>
 #include <iostream>
@@ -107,6 +108,10 @@ int main(int argc, char* argv[])
     // Open an output filestream to write too, along with a vector for a buffer.
     ofstream ofs;
     ofs.open(OUTPUT_FILENAME, ofstream::out | ofstream::trunc | ofstream::binary);
+    int currFileSize = 0;
+    int maxFileSize = 65536;
+    vector<char> buffer;
+    buffer.reserve(maxFileSize);
 
     // Receive the server's packets. Break out until a FIN packet is received.
     vector<char> recvPacketEncoded(MAX_PACKET_LEN);
@@ -120,7 +125,12 @@ int main(int argc, char* argv[])
 
         // Read the data segment into the buffer.
         vector<char> recvPacketSegment(&recvPacketEncoded[HEADER_SIZE], &recvPacketEncoded[bytesReceived]);
-        ofs.write(&recvPacketSegment[0], recvPacketSegment.size());
+        if (maxFileSize <= currFileSize) {
+            maxFileSize *= 2;
+            buffer.reserve(maxFileSize);
+        }
+        buffer.insert(buffer.end(), recvPacketSegment.begin(), recvPacketSegment.end());
+        currFileSize += bytesReceived - HEADER_SIZE;
 
         // Packet has been received. Send an ACK packet back.
         Header sendAckPacket(recvPacket.getAckNum(), (recvPacket.getSeqNum() + bytesReceived - HEADER_SIZE) % MSN, MAX_RECVWIN, 1, 0, recvPacket.isFin());
@@ -133,7 +143,7 @@ int main(int argc, char* argv[])
     }
 
     // Write the file to stream.
-    // ofs.write(buffer, buffer.size());
+    ofs.write(&buffer[0], buffer.size());
     ofs.close();
 
     // Header sendFinPacket(recvPacket.getAckNum(), (recvPacket.getSeqNum() + MSS) % MSN, MAX_RECVWIN, true, false, true);
